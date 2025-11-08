@@ -1,10 +1,17 @@
 import streamlit as st
+import os
+# 导入 os 用于获取 GEMINI_API_KEY
+import requests
+from bs4 import BeautifulSoup
+# 导入 Google GenAI 库，确保您已在 requirements.txt 中添加 google-genai
+from google import genai 
+from google.genai.errors import APIError
 
 # --- 配置页面和样式 ---
 # 设置页面布局为宽屏，并定义一个标题
 st.set_page_config(layout="wide", page_title="B2B Content AI Generator MVP")
 
-# 使用 CSS 注入来调整布局和样式，使其看起来更专业（可选，但推荐）
+# 使用 CSS 注入来调整布局和样式，使其看起来更专业
 st.markdown("""
 <style>
 /* 自定义标题样式 */
@@ -36,45 +43,110 @@ p {
 """, unsafe_allow_html=True)
 
 
-# --- 核心功能：模拟内容生成函数 ---
-def generate_content_mock(tech_input, platform, tone, brand_notes):
+# ---------------------------------------------------------
+# 1. 核心功能：数据抓取（抓取Jira的文案风格）
+# ---------------------------------------------------------
+
+# 目标 URL：一个具体的 Atlassian Jira 产品更新博客文章
+JIRA_STYLE_URL = "https://blog.atlassian.com/jira-software-product-updates-2024/"
+
+def fetch_style_content(url):
     """
-    此函数模拟调用您的 AI 模型 (Gemini API)。
-    在真正的项目中，您将在这里编写 API 调用和提示词工程代码。
+    抓取目标 URL 的内容，用于提取文案风格。
     """
-    if not tech_input:
-        return ("👋 请在左侧输入您的技术更新内容，我们将为您生成专业的营销文案。", "欢迎使用！")
+    try:
+        # 模拟浏览器访问
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        # 使用 requests 抓取页面
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status() 
+        
+        # 使用 BeautifulSoup 解析 HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # 针对 Atlassian 博客的特点，寻找核心文章内容
+        main_content = soup.find('div', class_='article-body-container') 
+        
+        if main_content:
+            # 提取前几个段落的文本作为风格样本
+            paragraphs = main_content.find_all('p', limit=6)
+            style_text = "\n".join([p.get_text(strip=True) for p in paragraphs])
+            
+            if style_text and len(style_text) > 100:
+                return style_text
+            
+            return "ERROR: 无法从指定元素中提取足够的文案风格文本。"
+        
+        return "ERROR: 无法找到文章主体（特定的CSS class）。"
+        
+    except requests.exceptions.RequestException as e:
+        return f"ERROR: 数据抓取失败（网络/URL错误）。{e}"
+    except Exception as e:
+        return f"ERROR: 网页解析失败。{e}"
 
-    # 1. 模拟AI提炼核心点 (这是您数据清洗/提炼的第一步)
-    core_points = tech_input.split('.')
-    
-    # 2. 模拟AI生成标题 (基于TOP 10的专业模式)
-    title = f"🚀 {platform} 重磅发布：{core_points[0].strip()} — 让您的团队工作效率提升 30%!"
 
-    # 3. 模拟AI生成结构化文案
-    content = f"""
-### 核心价值 (Value Proposition)
-我们很高兴地宣布，新的 {platform} 版本已正式发布。本次更新主要聚焦于提升您的 **{tone}** 工作流效率，解决了一直以来困扰用户的核心痛点。
-**您的 {brand_notes if brand_notes else "业务核心"}** 将因此次更新而显著受益。
+# ---------------------------------------------------------
+# 2. 核心功能：AI 内容生成（调用 Gemini API）
+# 此函数替换了您原文件中的 generate_content_mock 函数
+# ---------------------------------------------------------
 
----
-### 关键亮点 (Key Features)
+def generate_content_with_ai(tech_input, platform, tone, brand_notes, style_sample):
+    """
+    调用 Gemini API，根据用户输入和抓取到的风格数据生成营销文案。
+    """
+    # 检查 API Key
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return ("ERROR: 无法找到 GEMINI_API_KEY。请在 Streamlit Cloud Secrets 中进行设置。", "API Key 缺失")
 
-以下是本次更新带来的三大核心优势：
+    try:
+        client = genai.Client(api_key=api_key)
+        
+        # 构造详细的提示词 (Prompt Engineering)
+        prompt = f"""
+        你是一位顶级 SaaS 公司的专业内容营销专家。你的任务是将原始技术更新内容转化为高质量的营销文案。
+        
+        **关键指令：** 请严格模仿以下提供的“目标公司文案样本”的语言、语调、结构和专业度。
+        
+        --- 目标公司文案样本 (JIRA 风格) ---
+        {style_sample}
+        --- 目标公司文案样本结束 ---
+        
+        原始技术内容 (Raw Tech Input):
+        ---
+        {tech_input}
+        ---
+        
+        生成要求:
+        1. 目标平台: {platform}
+        2. 语调: {tone}
+        3. 品牌特殊指令: {brand_notes if brand_notes else '无特殊指令'}
+        4. **结构化输出**: 必须包含清晰的“核心价值 (Value Proposition)”和“关键亮点 (Key Features)”部分，重点突出对客户的业务价值。
+        5. 文案总长度应适中，符合 {platform} 的阅读习惯。
 
-1.  **{core_points[0].strip()}**：我们重构了底层架构，使得 **{core_points[0].strip().split()[0]}** 的性能提升了 30%。
-2.  **{core_points[1].strip() if len(core_points) > 1 else '全新数据处理管道'}**：增强了数据同步的可靠性，保障企业级数据流的零停机。
-3.  **{core_points[2].strip() if len(core_points) > 2 else '安全合规强化'}**：全面升级了加密协议，完全满足最新的国际安全标准。
+        请直接输出最终的营销文案。
+        """
 
-### 为什么这对您的业务至关重要 (Why It Matters)
-借助本次增强，您的团队现在可以以前所未有的速度和准确性完成任务。这不仅是性能的飞跃，更是我们对 **{brand_notes if brand_notes else "提供卓越 SaaS 体验"}** 承诺的体现。
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', # 使用高效的 Flash 模型
+            contents=prompt
+        )
+        
+        # 提取AI生成的标题 (这里简化为从用户输入中提取)
+        title = f"🚀 {platform} 重磅发布：{tech_input.split('.')[0].strip()}!"
+        
+        return response.text, title
 
-**👉 立即体验：** 登录您的账户，感受全新的 {platform} 吧！
-"""
-    return content, title
+    except APIError as e:
+        return (f"ERROR: Gemini API 调用失败。请检查您的 API Key 是否有效。错误详情: {e}", "API 错误")
+    except Exception as e:
+        return (f"ERROR: AI 生成过程中出现未知错误。{e}", "未知错误")
 
-# --- 4. UI 界面布局 (双栏) ---
-# 定义双栏布局，左侧占 65% 用于输入和控制，右侧占 35% 用于预览
+
+# --- 3. UI 界面布局 (双栏) ---
 col_input, col_output = st.columns([0.65, 0.35]) 
 
 
@@ -123,12 +195,31 @@ with col_input:
     
     # --- 步骤 3：一键生成 ---
     if st.button('✨ Generate Professional Content Now!'):
-        # 按钮按下后，调用内容生成函数
-        with st.spinner('AI 正在基于 TOP 10 SaaS 模式生成专业文案...'):
-            generated_text, generated_title = generate_content_mock(tech_input, platform, tone, brand_notes)
-        # 将生成的内容存储在 session_state 中，以便在右侧显示
-        st.session_state['generated_content'] = generated_text
-        st.session_state['generated_title'] = generated_title
+        if not tech_input:
+            st.warning("请输入技术更新内容后再点击生成按钮！")
+        else:
+            with st.spinner('正在抓取 TOP 10 SaaS 范例数据 (Jira) 并调用 AI 生成内容...'):
+                
+                # 1. 抓取 Jira 文案风格
+                style_sample = fetch_style_content(JIRA_STYLE_URL)
+                
+                # 2. 处理抓取结果
+                if style_sample.startswith("ERROR"):
+                    # 如果抓取失败，显示错误并使用通用风格作为后备
+                    st.error(style_sample)
+                    final_style_sample = "抓取失败，请使用通用顶级 SaaS 风格。"
+                else:
+                    st.success("Jira 文案风格样本抓取成功！")
+                    final_style_sample = style_sample
+
+                # 3. 调用 AI 生成内容
+                generated_text, generated_title = generate_content_with_ai(
+                    tech_input, platform, tone, brand_notes, final_style_sample
+                )
+                
+                # 将生成的内容存储在 session_state 中，以便在右侧显示
+                st.session_state['generated_content'] = generated_text
+                st.session_state['generated_title'] = generated_title
     
     # 初始化 session state，防止首次加载报错
     if 'generated_content' not in st.session_state:
@@ -136,7 +227,7 @@ with col_input:
         st.session_state['generated_title'] = "AI 文案预览"
 
 
-# --- 5. 右侧：输出与预览区 ---
+# --- 4. 右侧：输出与预览区 ---
 with col_output:
     st.markdown('<p style="font-size:24px; font-weight:600;">✍️ 文案预览与微调 (Final Output)</p >', unsafe_allow_html=True)
     st.markdown("---")
