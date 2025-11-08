@@ -48,7 +48,7 @@ p {
 # ---------------------------------------------------------
 
 # 目标 URL：一个具体的 Atlassian Jira 产品更新博客文章
-JIRA_STYLE_URL = "https://blog.atlassian.com/jira-software-product-updates-2024/"
+JIRA_STYLE_URL = "https://blog.atlassian.com/jira-cloud-automation-updates-2024/"
 
 def fetch_style_content(url):
     """
