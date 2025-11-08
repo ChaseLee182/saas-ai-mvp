@@ -86,7 +86,6 @@ def fetch_style_content(url):
         return f"ERROR: 数据抓取失败（网络/URL错误）。{e}"
     except Exception as e:
         return f"ERROR: 网页解析失败。{e}"
-
 # ---------------------------------------------------------
 # 2. 核心功能：AI 内容生成（调用 Gemini API）
 # 此函数替换了您原文件中的 generate_content_mock 函数
