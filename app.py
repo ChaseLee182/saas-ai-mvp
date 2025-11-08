@@ -47,46 +47,45 @@ p {
 # 1. 核心功能：数据抓取（抓取Jira的文案风格）
 # ---------------------------------------------------------
 
-# 目标 URL：一个具体的 Atlassian Jira 产品更新博客文章
-JIRA_STYLE_URL = "https://blog.atlassian.com/jira-cloud-automation-updates-2024/"
+# 目标 URL：Jira 软件的通用博客分类页，更稳定
+JIRA_STYLE_URL = "https://blog.atlassian.com/category/jira-software/" 
 
 def fetch_style_content(url):
     """
-    抓取目标 URL 的内容，用于提取文案风格。
+    抓取目标 URL 的内容，用于提取文案风格（针对博客列表页）。
     """
     try:
-        # 模拟浏览器访问
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
         
-        # 使用 requests 抓取页面
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status() 
         
-        # 使用 BeautifulSoup 解析 HTML
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # 针对 Atlassian 博客的特点，寻找核心文章内容
-        main_content = soup.find('div', class_='article-body-container') 
+        # 寻找文章摘要或简介的元素。对于 Atlassian 博客，我们寻找文章列表中的摘要文本。
+        # 这里尝试寻找带有特定摘要类名的段落
+        summaries = soup.find_all('div', class_='summary', limit=5)
         
-        if main_content:
-            # 提取前几个段落的文本作为风格样本
-            paragraphs = main_content.find_all('p', limit=6)
-            style_text = "\n".join([p.get_text(strip=True) for p in paragraphs])
+        style_text = ""
+        if summaries:
+            # 拼接抓取到的所有摘要文本
+            for summary in summaries:
+                style_text += summary.get_text(strip=True) + " "
             
-            if style_text and len(style_text) > 100:
-                return style_text
+            if len(style_text) > 200:
+                # 返回清理后的文本
+                return style_text.strip()
             
-            return "ERROR: 无法从指定元素中提取足够的文案风格文本。"
+            return "ERROR: 无法从列表页元素中提取足够的文案风格文本（内容太少）。"
         
-        return "ERROR: 无法找到文章主体（特定的CSS class）。"
+        return "ERROR: 无法找到文章摘要或简介元素。"
         
     except requests.exceptions.RequestException as e:
         return f"ERROR: 数据抓取失败（网络/URL错误）。{e}"
     except Exception as e:
         return f"ERROR: 网页解析失败。{e}"
-
 
 # ---------------------------------------------------------
 # 2. 核心功能：AI 内容生成（调用 Gemini API）
@@ -229,7 +228,7 @@ with col_input:
 
 # --- 4. 右侧：输出与预览区 ---
 with col_output:
-    st.markdown('<p style="font-size:24px; font-weight:600;">✍️ 文案预览与微调 (Final Output)</p >', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:24px; font-weight:600;"✍️ 文案预览与微调 (Final Output)</p >', unsafe_allow_html=True)
     st.markdown("---")
     
     # 显示生成的标题
