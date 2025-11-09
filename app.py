@@ -44,15 +44,15 @@ p {
 
 
 # ---------------------------------------------------------
-# 1. 核心功能：数据抓取（抓取Jira的文案风格）
+# 1. 核心功能：数据抓取（抓取 TechCrunch 科技博客的文案风格）
 # ---------------------------------------------------------
 
-# 目标 URL：Jira 软件的通用博客分类页，更稳定
-JIRA_STYLE_URL = "https://blog.atlassian.com/category/jira-software/" 
+# 目标 URL：TechCrunch 的通用科技新闻页 (更稳定，结构更清晰)
+TECHCRUNCH_URL = "https://techcrunch.com/category/startups/" 
 
 def fetch_style_content(url):
     """
-    抓取目标 URL 的内容，用于提取文案风格（针对博客列表页）。
+    抓取目标 URL 的内容，用于提取文案风格（针对 TechCrunch 博客列表页）。
     """
     try:
         headers = {
@@ -64,28 +64,30 @@ def fetch_style_content(url):
         
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # 寻找文章摘要或简介的元素。对于 Atlassian 博客，我们寻找文章列表中的摘要文本。
-        # 这里尝试寻找带有特定摘要类名的段落
-        summaries = soup.find_all('div', class_='summary', limit=5)
+        # 寻找文章摘要或简介的元素。针对 TechCrunch
+        # 寻找文章列表中的摘要/描述文本
+        summaries = soup.find_all('div', class_='post-description', limit=5)
         
         style_text = ""
         if summaries:
             # 拼接抓取到的所有摘要文本
             for summary in summaries:
+                # 提取摘要文本，并清理空行
                 style_text += summary.get_text(strip=True) + " "
             
             if len(style_text) > 200:
                 # 返回清理后的文本
                 return style_text.strip()
             
-            return "ERROR: 无法从列表页元素中提取足够的文案风格文本（内容太少）。"
+            return "ERROR: 无法从 TechCrunch 列表页元素中提取足够的文案风格文本（内容太少）。"
         
-        return "ERROR: 无法找到文章摘要或简介元素。"
+        return "ERROR: 无法找到 TechCrunch 文章摘要或简介元素。"
         
     except requests.exceptions.RequestException as e:
         return f"ERROR: 数据抓取失败（网络/URL错误）。{e}"
     except Exception as e:
         return f"ERROR: 网页解析失败。{e}"
+
 # ---------------------------------------------------------
 # 2. 核心功能：AI 内容生成（调用 Gemini API）
 # 此函数替换了您原文件中的 generate_content_mock 函数
@@ -109,7 +111,7 @@ def generate_content_with_ai(tech_input, platform, tone, brand_notes, style_samp
         
         **关键指令：** 请严格模仿以下提供的“目标公司文案样本”的语言、语调、结构和专业度。
         
-        --- 目标公司文案样本 (JIRA 风格) ---
+        --- 目标公司文案样本 (TechCrunch 风格) ---
         {style_sample}
         --- 目标公司文案样本结束 ---
         
@@ -156,7 +158,7 @@ with col_input:
     # --- 步骤 1：技术内容输入 ---
     st.subheader("1. 粘贴您的技术更新内容")
     tech_input = st.text_area(
-        "输入您的 Jira/GitHub 日志、技术说明或 Bug 修复列表。",
+        "输入您的 TechCrunch/GitHub 日志、技术说明或 Bug 修复列表。",
         height=280,
         placeholder="例如: Fixed a critical bug in the payment gateway, added multi-currency support for European users, and improved API response time by 20%."
     )
@@ -196,10 +198,10 @@ with col_input:
         if not tech_input:
             st.warning("请输入技术更新内容后再点击生成按钮！")
         else:
-            with st.spinner('正在抓取 TOP 10 SaaS 范例数据 (Jira) 并调用 AI 生成内容...'):
+            with st.spinner('正在抓取 TOP 10 SaaS 范例数据 (TechCrunch) 并调用 AI 生成内容...'):
                 
-                # 1. 抓取 Jira 文案风格
-                style_sample = fetch_style_content(JIRA_STYLE_URL)
+                # 1. 抓取 TECHCRUNCH 文案风格
+                style_sample = fetch_style_content(TECHCRUNCH_URL)
                 
                 # 2. 处理抓取结果
                 if style_sample.startswith("ERROR"):
@@ -207,7 +209,7 @@ with col_input:
                     st.error(style_sample)
                     final_style_sample = "抓取失败，请使用通用顶级 SaaS 风格。"
                 else:
-                    st.success("Jira 文案风格样本抓取成功！")
+                    st.success("TechCrunch 文案风格样本抓取成功！")
                     final_style_sample = style_sample
 
                 # 3. 调用 AI 生成内容
