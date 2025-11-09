@@ -184,10 +184,10 @@ with col_input:
 
 
 # 初始化 session state，防止首次加载报错
+# 修复：使用纯英文来初始化 session state
 if 'generated_content' not in st.session_state:
-    st.session_state['generated_content'] = "请点击上方按钮生成内容。"
-    st.session_state['generated_title'] = "AI 文案预览"
-
+    st.session_state['generated_content'] = 'Click the button above to generate content.'
+    st.session_state['generated_title'] = 'AI Content Preview'
 
 # --- 4. 右侧：输出与预览区 ---
 with col_output:
