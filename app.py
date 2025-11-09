@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 import os
 # 移除了 requests 和 BeautifulSoup 导入
