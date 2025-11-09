@@ -53,13 +53,14 @@ def generate_content_with_ai(tech_input, platform, tone, brand_notes, style_samp
         **Raw Technical Log to Convert:**
         {tech_input}
 
-        **Instructions:**
+       # Instructions:
         1. Extract the core customer value from the technical log.
         2. Write a compelling title (maximum 10 words).
         3. Write the full content body, focusing on benefits, not features.
         4. ONLY output the title and content body, using the following exact format:
            TITLE: [Your Title Here]
            CONTENT: [Your Generated Content Body Here]
+        5. The entire output (Title and Content) MUST be in English.
         """
 
         response = client.models.generate_content(
