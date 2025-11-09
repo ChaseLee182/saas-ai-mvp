@@ -1,226 +1,190 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
 import os
-# 移除了 requests 和 BeautifulSoup 导入
-
-# 导入 Google GenAI 库
 from google import genai
 from google.genai.errors import APIError
 
-# --- 配置页面和样式 ---
-# 必须是 Streamlit 脚本中的第一个命令，且参数必须是字符串
+# --- Configuration & Styling ---
 st.set_page_config(layout="wide", page_title="B2B Content AI Generator MVP")
 
-# 使用 CSS 注入来调整布局和样式，使其看起来更专业
+# Custom CSS for a professional look
 st.markdown(
     """
-<style>
-/* 自定义标题样式 */
-.main-header {
-    font-size: 36px !important;
-    font-weight: 700;
-    color: #007bff; /* 蓝色作为品牌强调色 */
-    margin-bottom: 5px;
-}
-/* 调整输入框和选择框的圆角 */
-.stTextArea, .stSelectbox {
-    border-radius: 8px;
-}
-/* 主按钮样式 */
-.stButton>button {
-    background-color: #007bff;
-    color: white;
-    font-weight: bold;
-    border-radius: 8px;
-    height: 3.5em; /* 按钮更高 */
-    width: 100%; /* 按钮占满宽度 */
-    font-size: 18px;
-}
-/* 将 Streamlit 默认的 'st.write' 字体放大一点 */
-p {
-    font-size: 16px;
-}
-</style>
-""", unsafe_allow_html=True)
+    <style>
+    .main-header {
+        font-size: 36px !important;
+        font-weight: 700;
+        color: #007bff; /* Blue for branding */
+        margin-bottom: 5px;
+    }
+    textarea, .stSelectbox {
+        border-radius: 8px;
+    }
+    .stButton>button {
+        background-color: #007bff;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True
+)
+st.markdown('<p class="main-header">Product Update AI Generator</p>', unsafe_allow_html=True)
+st.markdown('### Input & Settings')
 
-
-# ---------------------------------------------------------
-# 1. 核心功能：AI 内容生成（调用 Gemini API）
-# ---------------------------------------------------------
-
+# --- 1. AI Function: Content Generation ---
 def generate_content_with_ai(tech_input, platform, tone, brand_notes, style_sample):
     """
-    调用 Gemini API，根据用户输入和风格数据生成营销文案。
+    Calls Gemini API to generate professional content based on inputs.
     """
-    
-    # 检查 API Key
-    api_key = os.getenv("GEMINI_API_KEY") # 修正：这里变量名保持一致
-    if not api_key:
-        # 修正：返回信息中的字符串已用引号包围
-        return ("ERROR: 无法找到 GEMINI_API_KEY。请在 Streamlit Cloud Secrets 中进行设置。", "API Key 缺失")
-
     try:
-        client = genai.Client(api_key=api_key)
-        
-        # 构造详细的提示词 (Prompt Engineering)
-        # 修正：使用三引号定义多行 f-string
+        client = genai.Client()
+
+        # Build the prompt
         prompt = f"""
-        你是一位顶级 SaaS 公司的专业内容营销专家。你的任务是将原始技术更新内容转化为高质量的营销文案。
-        
-        **关键指令：** 请严格模仿以下提供的“目标公司文案样本”的语言、语调、结构和专业度。
-        
-        --- 目标公司文案样本 (硬编码风格) ---
+        You are an expert B2B SaaS marketing copywriter. Your task is to transform raw technical changelog entries into engaging, value-driven marketing content.
+
+        **Goal:** Convert the technical log into a professional, high-value content piece for the platform: {platform}.
+        **Tone:** {tone}.
+        **Brand Notes (if provided):** {brand_notes if brand_notes else 'None provided, focus on general B2B professionalism.'}
+        **Style Sample (MUST use this style):**
+        ---
         {style_sample}
-        --- 目标公司文案样本结束 ---
-        
-        原始技术内容 (Raw Tech Input):
         ---
+
+        **Raw Technical Log to Convert:**
         {tech_input}
-        ---
-        
-        生成要求:
-        1. 目标平台: {platform}
-        2. 语调: {tone}
-        3. 品牌特殊指令: {brand_notes if brand_notes else '无特殊指令'}
-        4. **结构化输出**: 必须包含清晰的“### 核心价值 (Value Proposition)”和“### 关键亮点 (Key Features)”部分，重点突出对客户的业务价值。
-        5. 文案总长度应适中，符合 {platform} 的阅读习惯。
-        
-        请直接输出最终的营销文案。
+
+        **Instructions:**
+        1. Extract the core customer value from the technical log.
+        2. Write a compelling title (maximum 10 words).
+        3. Write the full content body, focusing on benefits, not features.
+        4. ONLY output the title and content body, using the following exact format:
+           TITLE: [Your Title Here]
+           CONTENT: [Your Generated Content Body Here]
         """
-        
+
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # 使用高效的 Flash 模型
+            model='gemini-2.5-flash',
             contents=prompt
         )
+
+        # Parse the output
+        output_text = response.text.strip()
         
-        # 提取 AI 生成的标题
-        # 简化标题提取，让 AI 直接根据内容生成，这里只是一个占位符
-        title = f"🚀 {platform} 重磅发布：Technical Change Log Update"
-        
-        return response.text, title
+        # Split title and content based on the defined format
+        if "TITLE:" in output_text and "CONTENT:" in output_text:
+            title_line = [line for line in output_text.split('\n') if line.startswith('TITLE:')][0]
+            content_start_index = output_text.find("CONTENT:") + len("CONTENT:")
+            
+            generated_title = title_line.replace("TITLE:", "").strip()
+            generated_text = output_text[content_start_index:].strip()
+            
+            return generated_text, generated_title
+        else:
+            return f"ERROR: AI output format is incorrect. Raw output: {output_text}", "Parsing Error"
 
     except APIError as e:
-        return (f"ERROR: Gemini API 调用失败。请检查您的 API Key 是否有效。错误详情: {e}", "API 错误")
+        return f"ERROR: Gemini API Error: {e}", "API Error"
     except Exception as e:
-        return (f"ERROR: AI 生成过程中出现未知错误。{e}", "未知错误")
+        # Generic error fallback for unexpected issues
+        return f"ERROR: An unknown error occurred during AI generation. {e}", "Unknown Error"
 
+# --- 2. Streamlit UI: Inputs ---
 
-# --- 2. UI 界面布局 (双栏) ---
-col_input, col_output = st.columns([0.65, 0.35]) 
-
+col_input, col_output = st.columns([0.65, 0.35])
 
 with col_input:
-    st.markdown('<p class="main-header">Product Update AI Generator</p>', unsafe_allow_html=True)
-    st.write("将您的技术文档转化为专业的营销文案，达到 TOP 10 SaaS 公司的质量标准。")
-    st.markdown("---")
-    
-    # --- 步骤 1：技术内容输入 ---
-    st.subheader("1. 粘贴您的技术更新内容")
+    st.subheader('1. Paste Your Technical Change Log')
     tech_input = st.text_area(
-        "输入您的 Jira/GitHub 日志、技术说明或 Bug 修复列表。",
+        'Enter Jira/GitHub Logs, Specs, or Bug Fixes here.',
         height=280,
-        value="Core Feature Update: We have refactored the data processing pipeline to use a new asynchronous queue, which reduces latency for large file uploads by an average of 35% for all Enterprise tier clients. \n- Bug Fixes: Fixed a critical bug where users in the European region could not apply discount codes to subscription renewals due to a localized currency formatting error. \n- New API Endpoint: Added a new /api/v2/webhooks/status endpoint for better external monitoring and real-time event delivery tracking for partners. \n- Security Patch: Implemented multi-factor authentication (MFA) enforcement for all administrator accounts across the platform.",
-        placeholder="例如: Fixed a critical bug in the payment gateway, added multi-currency support for European users, and improved API response time by 20%."
+        placeholder="Core Feature Update: Refactored data pipeline to reduce latency by 35% for Enterprise clients. \nBug Fix: Fixed critical currency formatting error for European users. \nNew API Endpoint: Added /api/v2/webhooks for better real-time event delivery."
     )
 
-    st.markdown("---")
+    st.subheader('2. Output Format & Tone Settings')
     
-    # --- 步骤 2：输出格式与语调设置 ---
-    st.subheader("2. 输出格式与语调设置")
-    
-    # 使用 st.columns 优化设置区的布局
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # A. 目标平台
+    col_plat, col_tone = st.columns(2)
+    with col_plat:
         platform = st.selectbox(
-            '目标文案类型 (Target Platform)',
-            ('博客文章 (Blog Post)', '电子邮件公告 (Email Announcement)', '推特/X 帖子 (Social Thread)')
+            'Target Platform',
+            ('Blog Post', 'Email Newsletter', 'Social Media Post', 'Internal Memo')
         )
-    
-    with col2:
-        # B. 目标受众与语调
+    with col_tone:
         tone = st.selectbox(
-            '目标语调与受众 (Tone & Audience)',
-            ('专业 (Professional)', '友好 (Friendly)', '面向开发者 (Developer-Focused)', '幽默 (Witty)')
+            'Tone & Audience',
+            ('Professional (SaaS, B2B)', 'Casual (Internal Team)', 'Excited (Product Launch)')
         )
-    
-    # C. 品牌特殊指令
+        
     brand_notes = st.text_input(
-        '品牌特殊指令 (Brand Notes) (可选)',
-        placeholder="例如: 我们的核心价值是‘协作第一’"
+        "Brand Notes (Optional)",
+        placeholder="E.g.: Our core value is 'Collaboration First'",
     )
 
-    st.markdown("---")
-    
-    # --- 步骤 3：一键生成 (硬编码风格样本) ---
+    # --- 3. Generate Button & Logic (Hard-coded Style) ---
     if st.button('✨ Generate Professional Content Now!'):
         
-        # 修正：使用三引号定义多行字符串
+        # Hard-coded style sample to ensure stability
         fixed_style_sample = """
-        核心原则：文案必须积极、专业、以客户价值为中心。使用动词和数字突出效益。
-        示例风格：在当今快速变化的数字环境中，您的团队需要的是一个能够简化复杂性的工具。我们重构了核心架构，现在，您可以以前所未有的速度和可靠性实现目标。
+        Style Principle: Content must be positive, professional, and customer-value centric. Use verbs and numbers to highlight benefits.
+        Example Style: In today's fast-moving digital environment, your team needs tools that simplify complexity. We have rebuilt the core architecture so you can achieve your goals with unprecedented speed and reliability.
         """
         
         if not tech_input:
-            st.warning("请输入技术更新内容后再点击生成按钮！") # 修正：添加引号
+            st.warning("Please enter technical update content before clicking generate!")
         else:
-            with st.spinner('AI 正在基于 TOP 10 SaaS 风格生成专业文案...'):
+            with st.spinner('AI is generating professional copy based on top SaaS style...'):
                 
-                # 直接使用固定风格样本，不再进行网络抓取
+                # Use the fixed style sample
                 final_style_sample = fixed_style_sample
 
-                # 3. 调用 AI 生成内容
+                # Call AI to generate content
                 generated_text, generated_title = generate_content_with_ai(
                     tech_input, platform, tone, brand_notes, final_style_sample
                 )
                 
-                # 抓取步骤已跳过，直接显示 AI 结果
-                st.success("成功跳过抓取步骤，AI 正在基于预设的高质量风格生成文案！") # 修正：添加引号
-                
-                # 将生成的内容存储在 session_state 中，以便在右侧显示
-                st.session_state['generated_content'] = generated_text
-                st.session_state['generated_title'] = generated_title
+                # Check for parsing or API errors
+                if "ERROR:" in generated_text:
+                    st.error(generated_text)
+                    st.session_state['generated_content'] = generated_text
+                    st.session_state['generated_title'] = generated_title
+                else:
+                    st.success("Content generation successful! Review output on the right.")
+                    # Store generated content in session state
+                    st.session_state['generated_content'] = generated_text
+                    st.session_state['generated_title'] = generated_title
 
-
-# 初始化 session state，防止首次加载报错
-# 修复：使用纯英文来初始化 session state
-if 'generated_content' not in st.session_state:
-    st.session_state['generated_content'] = 'Click the button above to generate content.'
-    st.session_state['generated_title'] = 'AI Content Preview'
-
-# --- 4. 右侧：输出与预览区 ---
+# --- 4. Streamlit UI: Output & Preview ---
 with col_output:
-    st.markdown('<p style="font-size:24px; font-weight:600;">✍️ 文案预览与微调 (Final Output)</p>', unsafe_allow_html=True)
-    st.markdown("---")
-    
-    # 显示生成的标题
-    st.markdown(f"**标题：** {st.session_state['generated_title']}", unsafe_allow_html=True)
-    
-    # 显示生成的正文，并允许用户编辑
+    st.markdown('<p style="font-size:24px; font-weight:600;">✨ Final Output</p>', unsafe_allow_html=True)
+
+    # Initialize session state (using English placeholder to prevent ASCII error)
+    if 'generated_content' not in st.session_state:
+        st.session_state['generated_content'] = 'Click the button above to generate content.'
+        st.session_state['generated_title'] = 'AI Content Preview'
+
+    # Display the title
+    st.markdown(f"**TITLE:** {st.session_state['generated_title']}", unsafe_allow_html=True)
+
+    # Display the generated text in a text_area for user editing
     final_text = st.text_area(
-        "生成的文案正文 (Review & Edit)",
+        "Generated Content (Review & Edit)",
         value=st.session_state['generated_content'],
         height=450
     )
+
+    st.markdown('---')
+    st.subheader('One-Click Export')
     
-    st.markdown("---")
-    
-    # --- 4. 导出与复制 ---
-    st.markdown('<p style="font-size:20px; font-weight:600;">一键导出</p>', unsafe_allow_html=True)
-    
-    # 导出按钮组
-    col_copy, col_export = st.columns(2)
-    
+    # Export Buttons
+    col_copy, col_md = st.columns(2)
     with col_copy:
-        st.button('📋 一键复制文本 (Copy Text)')
+        st.button('Copy Text', help="Copies the final text to clipboard")
+        # Note: Streamlit's simple button doesn't copy, this would need custom component
+        st.caption("Content ready for copy after generation.")
     
-    with col_export:
+    with col_md:
         st.download_button(
-            label="⬇️ 导出 Markdown",
+            label="Download Markdown",
             data=final_text,
-            file_name=f"product_update_{platform.split(' ')[0]}.md",
+            file_name=f"{st.session_state['generated_title'].replace(' ', '_').lower()}.md",
             mime="text/markdown"
         )
-    
-    st.caption("注：右键点击文案编辑区，也可以进行复制操作。")
