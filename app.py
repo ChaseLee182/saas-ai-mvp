@@ -18,7 +18,7 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
     # 使用 requests.Session 来处理代理
     session = requests.Session()
     if proxy_url:
-        st.info(f"正在使用代理: {proxy_url}")
+        st.info(f"正在尝试使用代理: {proxy_url}")
         session.proxies = {
             "http": proxy_url,
             "https": proxy_url,
@@ -26,6 +26,7 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
 
     if is_google_key:
         # Google Gemini API 调用
+        # 完整的 API URL 包含密钥
         url = f"{GOOGLE_API_BASE_URL}?key={api_key}"
         
         # 针对 Streamlit 应用场景构建的系统提示
@@ -50,14 +51,17 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
             
             result = response.json()
             # 提取 Google Gemini 的文本
-            generated_text = result['candidates'][0]['content']['parts'][0]['text']
-            return generated_text
+            if 'candidates' in result and result['candidates']:
+                generated_text = result['candidates'][0]['content']['parts'][0]['text']
+                return generated_text
+            else:
+                return "AI 模型返回内容为空或格式错误。"
         
         except requests.exceptions.RequestException as e:
             # 捕获网络、超时或 HTTP 错误
             error_message = f"Google API 调用失败。错误信息： {e}"
             st.error(error_message)
-            st.warning("请确认您的网络连接或代理设置是否允许访问 Google API。")
+            st.warning("请确认您的网络连接或代理设置是否允许访问 Google API。这是解决 400 错误的最佳尝试。")
             st.stop()
 
     else:
@@ -112,7 +116,7 @@ st.markdown("""
 
 # --- 侧边栏：API 密钥配置 (包含代理) ---
 with st.sidebar:
-    st.header("🔑 API 密钥配置 (快速修复)")
+    st.header("🔑 API 密钥配置 (修复网络问题)")
     
     # API 密钥输入
     api_key = st.text_input(
@@ -121,7 +125,7 @@ with st.sidebar:
         key="api_key_input"
     )
 
-    is_google_key = api_key.startswith("AIzaS") # 修正：只需要检查 AIzaS 开头
+    is_google_key = api_key.startswith("AIzaS")
     
     if api_key:
         if is_google_key:
