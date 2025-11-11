@@ -4,7 +4,6 @@ import json
 import os
 
 # --- 配置常量 ---
-# Google Gemini API URL (使用 gemini-2.5-flash 模型)
 GOOGLE_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 OPENAI_API_BASE_URL = "https://api.openai.com/v1/chat/completions"
 
@@ -15,7 +14,6 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
         "Content-Type": "application/json",
     }
     
-    # 使用 requests.Session 来处理代理
     session = requests.Session()
     if proxy_url:
         st.info(f"正在尝试使用代理: {proxy_url}")
@@ -25,11 +23,7 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
         }
 
     if is_google_key:
-        # Google Gemini API 调用
-        # 完整的 API URL 包含密钥
         url = f"{GOOGLE_API_BASE_URL}?key={api_key}"
-        
-        # 针对 Streamlit 应用场景构建的系统提示
         system_instruction = (
             "您是一位资深的 B2B SaaS 营销文案专家。请根据提供的技术更新和核心价值，"
             "将其转化为一篇专业、引人注目的营销文案。文案应突出商业价值和用户利益，"
@@ -39,18 +33,15 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
         data = {
             "contents": [{"parts": [{"text": prompt}]}],
             "config": {
-                # 注意: Google API 的 system instruction 放在 config 内部
                 "systemInstruction": system_instruction 
             }
         }
         
         try:
-            # 尝试调用 Google API
             response = session.post(url, headers=headers, json=data, timeout=30)
-            response.raise_for_status() # 抛出 HTTP 错误，如 400, 429
+            response.raise_for_status()
             
             result = response.json()
-            # 提取 Google Gemini 的文本
             if 'candidates' in result and result['candidates']:
                 generated_text = result['candidates'][0]['content']['parts'][0]['text']
                 return generated_text
@@ -58,18 +49,15 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
                 return "AI 模型返回内容为空或格式错误。"
         
         except requests.exceptions.RequestException as e:
-            # 捕获网络、超时或 HTTP 错误
             error_message = f"Google API 调用失败。错误信息： {e}"
             st.error(error_message)
-            st.warning("请确认您的网络连接或代理设置是否允许访问 Google API。这是解决 400 错误的最佳尝试。")
+            st.warning("请确认您的网络连接或代理设置是否允许访问 Google API。")
             st.stop()
 
     else:
-        # OpenAI API 调用 (保持不变，但仍使用 Session 处理代理)
         url = OPENAI_API_BASE_URL
         headers["Authorization"] = f"Bearer {api_key}"
         
-        # 针对 Streamlit 应用场景构建的系统提示
         system_prompt = (
             "You are a Senior B2B SaaS Marketing Copywriter. Convert the following technical updates and core values "
             "into a professional, compelling marketing copy. Highlight business value and user benefits using "
@@ -77,7 +65,7 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
         )
 
         data = {
-            "model": model, # 使用 gpt-3.5-turbo
+            "model": model, 
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
@@ -86,7 +74,6 @@ def call_api(api_key, is_google_key, prompt, model, proxy_url=None):
         }
         
         try:
-            # 尝试调用 OpenAI API
             response = session.post(url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
             
@@ -114,9 +101,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- 侧边栏：API 密钥配置 (包含代理) ---
+# --- 侧边栏：配置 ---
 with st.sidebar:
-    st.header("🔑 API 密钥配置 (修复网络问题)")
+    
+    # --- 强制代理设置 (移到最顶部) ---
+    st.header("🌐 网络/代理设置 (解决连接问题)")
+    proxy_url = st.text_input(
+        "HTTP/HTTPS 代理 URL (格式: http://host:port)",
+        placeholder="例如: http://公网IP:端口",
+        key="proxy_url_input_forced"
+    )
+    st.markdown("---")
+
+
+    st.header("🔑 API 密钥配置")
     
     # API 密钥输入
     api_key = st.text_input(
@@ -126,6 +124,7 @@ with st.sidebar:
     )
 
     is_google_key = api_key.startswith("AIzaS")
+    model_used = ""
     
     if api_key:
         if is_google_key:
@@ -136,19 +135,9 @@ with st.sidebar:
             model_used = "gpt-3.5-turbo"
         else:
             st.warning("密钥格式不识别。请确保输入正确的 OpenAI (sk-) 或 Google (AIzaS-) 密钥。")
-            st.stop()
     else:
         st.info("请输入您的 API 密钥以启用功能。")
-        st.stop()
 
-    # --- 新增代理设置 (解决 400 错误的关键尝试) ---
-    st.markdown("---")
-    st.subheader("🌐 网络/代理设置 (可选)")
-    proxy_url = st.text_input(
-        "HTTP/HTTPS 代理 URL (格式: http://host:port)",
-        placeholder="例如: http://127.0.0.1:7890",
-        key="proxy_url_input"
-    )
 
     # --- 文案风格设置 ---
     st.markdown("---")
@@ -184,10 +173,11 @@ core_value = st.text_input(
 )
 
 if st.button("生成专业内容!"):
-    if not technical_update.strip():
+    if not api_key:
+        st.error("请先在侧边栏输入 API 密钥。")
+    elif not technical_update.strip():
         st.error("请输入技术更新或功能说明才能生成内容。")
     else:
-        # 构造给 AI 的最终提示
         final_prompt = f"""
         请将以下技术更新日志转化为一篇面向 '{tone_and_audience}' 受众的 '{target_platform}' 营销文案。
         
@@ -209,10 +199,8 @@ if st.button("生成专业内容!"):
         """
 
         with st.spinner(f"正在使用 {model_used} 生成内容..."):
-            # 调用 API
             generated_copy = call_api(api_key, is_google_key, final_prompt, model_used, proxy_url)
             
-            # 显示结果
             st.markdown("---")
             st.subheader(f"🎉 生成的 {target_platform} 文案")
             st.info(f"模型：{model_used} | 语气：{tone_and_audience}")
